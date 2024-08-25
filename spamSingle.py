@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 import logging
+from itertools import cycle
 from colorama import Fore, init
 
 init(autoreset=True)
