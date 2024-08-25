@@ -104,7 +104,7 @@ print(f"{WhiteTerm}[{hijau}• SPAM SMS UNLIMITED{kuning}•{hijau}•{WhiteTerm
 num_threads = 5
 
 # Using ThreadPoolExecutor for parallel processing
-with ThreadPoolExecutor(max_threads=num_threads) as executor:
+with ThreadPoolExecutor(max_workers=num_threads) as executor:
     while True:
         future_to_request = {executor.submit(send_request): i for i in range(num_threads)}
         for future in as_completed(future_to_request):
