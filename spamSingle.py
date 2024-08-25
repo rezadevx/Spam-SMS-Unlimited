@@ -72,4 +72,56 @@ async def send_request(api_url, headers, data, session, proxy=None, retry_attemp
         try:
             async with session.post(api_url, headers=headers, data=data, proxy=proxy) as response:
                 if response.status == 200:
-                    logging.info(f"Berhasil mengirim SMS via {api_url}
+                    logging.info(f"Berhasil mengirim SMS via {api_url} - Attempt {attempt + 1}")
+                    print(f"{GreenTerm}Berhasil mengirim SMS via {api_url}")
+                    return True
+                else:
+                    logging.warning(f"Gagal mengirim SMS via {api_url}. Status code: {response.status} - Attempt {attempt + 1}")
+        except Exception as e:
+            logging.error(f"Terjadi kesalahan: {e} - Attempt {attempt + 1}")
+        
+        # Delay dengan backoff eksponensial
+        await asyncio.sleep(initial_delay * (2 ** attempt))
+    
+    print(f"{RedTerm}Gagal mengirim SMS setelah {retry_attempts} kali percobaan.")
+    return False
+
+async def fetch_proxies():
+    proxy_source_url = "https://www.proxy-list.download/api/v1/get?type=https"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(proxy_source_url) as response:
+                if response.status == 200:
+                    proxies = await response.text()
+                    return proxies.splitlines()
+                else:
+                    logging.error(f"Gagal mengambil proxy. Status code: {response.status}")
+                    return []
+    except Exception as e:
+        logging.error(f"Terjadi kesalahan saat mengambil proxy: {e}")
+        return []
+
+async def main():
+    api_url = "https://api.danacita.co.id/v4/users/mobile_register/"
+    input_number = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")
+    
+    data_danacita = json.dumps({
+        "username": input_number,
+    })
+
+    headers = generate_headers()
+    
+    proxy_list = await fetch_proxies()
+    if not proxy_list:
+        print(f"{RedTerm}Tidak dapat mengambil daftar proxy. Program akan berhenti.")
+        return
+    
+    async with aiohttp.ClientSession() as session:
+        for proxy in cycle(proxy_list):
+            success = await send_request(api_url, headers, data_danacita, session, proxy)
+            if success:
+                break
+
+# Run the main function
+if __name__ == "__main__":
+    asyncio.run(main())
