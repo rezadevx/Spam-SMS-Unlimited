@@ -7,17 +7,12 @@ import logging
 from colorama import Fore, init
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import cycle
 
 init(autoreset=True)
 
 # Set up logging
 logging.basicConfig(filename='spam_sms.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-def autotype(sync):
-    for change in sync + "\n":
-        sys.stdout.write(change)
-        sys.stdout.flush()
-        time.sleep(0.008)
 
 # Define colorama colors
 BlueTerm = Fore.BLUE
@@ -30,6 +25,12 @@ hijau = "\033[1;92m"
 putih = "\033[1;97m"
 biru = "\033[1;96m"
 kuning = "\033[1;93m"
+
+def autotype(sync):
+    for change in sync + "\n":
+        sys.stdout.write(change)
+        sys.stdout.flush()
+        time.sleep(0.008)
 
 def generate_user_agent():
     browsers = ['Chrome', 'Firefox', 'Safari', 'Edge', 'Opera']
@@ -102,13 +103,23 @@ print(f"{WhiteTerm}[{hijau}• SPAM SMS UNLIMITED{kuning}•{hijau}•{WhiteTerm
 
 # Parallel processing parameters
 num_threads = 5
+proxy_list = ["proxy1", "proxy2", "proxy3"]  # Add your proxy list here
+proxies = cycle(proxy_list)
+
+def get_proxy():
+    return next(proxies)
 
 # Using ThreadPoolExecutor for parallel processing
 with ThreadPoolExecutor(max_workers=num_threads) as executor:
     while True:
-        future_to_request = {executor.submit(send_request): i for i in range(num_threads)}
-        for future in as_completed(future_to_request):
+        futures = []
+        for _ in range(num_threads):
+            delay = random.randint(1, 5)  # Jeda acak sebelum setiap batch
+            time.sleep(delay)
+            futures.append(executor.submit(send_request))
+        
+        for future in as_completed(futures):
             future.result()  # This will raise any exceptions
 
-        # Delay before sending the next batch of requests
-        time.sleep(random.randint(10, 20))  # Delay antara 10 hingga 20 detik
+        # Delay sebelum mengirim batch berikutnya
+        time.sleep(random.randint(10, 30))  # Delay antara 10 hingga 30 detik
